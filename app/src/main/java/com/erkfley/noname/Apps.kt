@@ -16,23 +16,49 @@ data class AppInfo(
     val icon: Bitmap
 )
 
-/** Membaca daftar semua aplikasi yang punya launcher activity, urut abjad. */
+/**
+ * Membaca daftar semua aplikasi yang punya launcher activity, urut abjad.
+ * Anti-crash: satu entri per package (dedup), ikon bermasalah diganti ikon
+ * bawaan, dan error apa pun tidak boleh membuat launcher mati.
+ */
 fun loadApps(context: Context): List<AppInfo> {
     val pm = context.packageManager
-    val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
     val self = context.packageName
+    val seen = HashMap<String, AppInfo>()
 
-    return pm.queryIntentActivities(intent, 0)
-        .filter { it.activityInfo != null && it.activityInfo.packageName != self }
-        .map { ri ->
-            val drawable = ri.loadIcon(pm) ?: pm.getDefaultActivityIcon()
-            AppInfo(
-                label = ri.loadLabel(pm)?.toString() ?: ri.activityInfo.packageName,
-                packageName = ri.activityInfo.packageName,
-                icon = drawable.toBitmap(128)
-            )
+    try {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        for (ri in pm.queryIntentActivities(intent, 0)) {
+            val info = ri.activityInfo ?: continue
+            val pkg = info.packageName ?: continue
+            if (pkg == self || seen.containsKey(pkg)) continue
+
+            val app = try {
+                val drawable = try {
+                    ri.loadIcon(pm)
+                } catch (e: Exception) {
+                    null
+                } ?: pm.getDefaultActivityIcon()
+                val bitmap = try {
+                    drawable.toBitmap(128)
+                } catch (e: Exception) {
+                    pm.getDefaultActivityIcon().toBitmap(128)
+                }
+                AppInfo(
+                    label = ri.loadLabel(pm)?.toString()?.ifBlank { pkg } ?: pkg,
+                    packageName = pkg,
+                    icon = bitmap
+                )
+            } catch (e: Exception) {
+                null
+            }
+            if (app != null) seen[pkg] = app
         }
-        .sortedBy { it.label.lowercase() }
+    } catch (e: Exception) {
+        // Abaikan: lebih baik daftar kurang lengkap daripada launcher crash.
+    }
+
+    return seen.values.sortedBy { it.label.lowercase() }
 }
 
 /** Menggambar Drawable menjadi Bitmap persegi (untuk ikon aplikasi). */

@@ -20,6 +20,8 @@
             Activity utama = HOME SCREEN.
             category HOME + DEFAULT membuat Android menawarkan Noname
             sebagai launcher ketika tombol HOME ditekan.
+            category LAUNCHER membuat ikon Noname tetap muncul & bisa
+            diklik di daftar aplikasi launcher lain (seperti aplikasi biasa).
         -->
         <activity
             android:name=".MainActivity"
@@ -33,6 +35,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
     </application>
