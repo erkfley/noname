@@ -1,0 +1,15 @@
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+.kotlin/
+
+# JANGAN pernah commit keystore / kunci tanda tangan!
+*.keystore
+*.jks
+*.b64

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tema dasar: latar hitam agar tidak ada kilatan putih saat launcher dibuka.
+         Edge-to-edge (status bar transparan) diatur lewat enableEdgeToEdge() di kode. -->
+    <style name="Theme.Noname" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>
