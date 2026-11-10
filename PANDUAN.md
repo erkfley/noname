@@ -136,6 +136,32 @@ Selesai! HP-mu sekarang memakai launcher buatanmu sendiri. 🎉
 
 ---
 
+## Fitur v1.2 — Pin Beranda & Video Wallpaper
+
+### A. Beranda hanya berisi app pilihan
+- Buka drawer (swipe up) → **long-press aplikasi** → **"Tambah ke Beranda"**
+- Beranda otomatis hanya menampilkan app yang di-pin
+- Kalau belum ada yang di-pin, beranda menampilkan semua aplikasi
+- Untuk menghapus dari beranda: long-press app → **"Hapus dari Beranda"**
+
+### B. Video Wallpaper (file .mp4 dari HP)
+- **Long-press area kosong di beranda** → menu *Wallpaper & Pengaturan*
+- **Pilih Video Wallpaper** → pilih file video dari penyimpanan (picker sistem, tanpa izin khusus)
+- **Suara Video** → default senyap; tap untuk menyalakan/mematikan
+- **Kembali ke Wallpaper Gambar** → matikan mode video
+- Video **tetap berjalan di latar belakang** (pilihanmu!) — ditandai notifikasi permanen *"Noname — Wallpaper Video"*. Itu syarat wajib Android untuk app yang berjalan terus; jangan swipe-away notifikasinya kalau mau video tetap jalan.
+- Kalau video gagal diputar (codec tidak didukung HP), launcher otomatis kembali ke wallpaper gambar — tidak pernah crash.
+- **Tanpa batas durasi & resolusi** — tapi catatan: video makin panjang/makin tinggi resolusi = makin banyak baterai & berpotensi patah-patah di HP ber-spek rendah.
+
+### C. Supaya video TIDAK dimatikan sistem (penting!)
+Android hemat baterai bisa membunuh service latar belakang. Agar video berjalan mulus terus:
+
+1. **Settings → Apps → Noname → Battery → pilih Unrestricted** (nama menu bisa berbeda: "Tanpa batasan baterai" / "Don't optimize")
+2. Jangan pakai mode hemat daya ekstrem saat ingin video jalan
+3. Biarkan notifikasi "Noname — Wallpaper Video" tetap ada
+
+---
+
 ## Langkah 7 — Alur kerja harian (mengubah kode)
 
 ```bash
@@ -208,14 +234,15 @@ noname/
         ├── java/com/erkfley/noname/
         │   ├── MainActivity.kt     ← pintu masuk app
         │   ├── Apps.kt             ← data aplikasi, wallpaper, aksi buka/hapus
-        │   └── Ui.kt               ← tampilan: grid home, drawer, menu
+        │   ├── Ui.kt               ← tampilan: beranda pin, drawer, video, menu
+        │   ├── VideoWallpaper.kt   ← otak video wallpaper + data pin
+        │   └── VideoWallpaperService.kt ← penjaga proses di latar belakang
         └── res/                    ← ikon, tema, nama app
 ```
 
 ## Rencana fase berikutnya
 
-- Fase 2: dock, jam/tanggal di home, efek visual
-- Fase 3: ukuran grid bisa diatur, tema warna, icon pack
-- Fase 4: widget, folder, drag & drop, badge notifikasi
+- Fase 3: efek visual, tema warna, icon pack
+- Fase 4: widget, folder, drag & drop, badge notifikasi, live wallpaper layar kunci
 
 Diskusikan fitur berikutnya dengan GLM, ubah kodenya bareng, push, selesai.

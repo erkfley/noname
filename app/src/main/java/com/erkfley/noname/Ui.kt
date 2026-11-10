@@ -1,6 +1,13 @@
 package com.erkfley.noname
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import android.view.TextureView
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -10,6 +17,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -31,6 +39,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -57,6 +66,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -69,7 +80,56 @@ fun NonameApp() {
     var query by rememberSaveable { mutableStateOf("") }
     var selected by remember { mutableStateOf<AppInfo?>(null) }
     var dragAccum by remember { mutableStateOf(0f) }
+    var showHomeMenu by remember { mutableStateOf(false) }
     val wallpaper = remember { getWallpaperBitmap(context) }
+
+    // ===== Video wallpaper & pin beranda =====
+    var videoUri by remember { mutableStateOf(VideoWallpaper.getVideoUri(context)) }
+    var muted by remember { mutableStateOf(VideoWallpaper.isMuted(context)) }
+    var pinned by remember { mutableStateOf(VideoWallpaper.getPinned(context)) }
+    var pickAfterPermission by remember { mutableStateOf(false) }
+
+    val videoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                // Beberapa provider tidak memberi izin persisten; tetap coba putar.
+            }
+            VideoWallpaper.enable(context, uri)
+            videoUri = VideoWallpaper.getVideoUri(context)
+        }
+    }
+
+    val notifPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        if (pickAfterPermission) {
+            pickAfterPermission = false
+            videoPicker.launch(arrayOf("video/*"))
+        }
+    }
+
+    fun pilihVideo() {
+        val granted = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(
+            context, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            videoPicker.launch(arrayOf("video/*"))
+        } else {
+            pickAfterPermission = true
+            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    // Pastikan service jalan selama mode video aktif.
+    LaunchedEffect(videoUri) {
+        if (videoUri != null) VideoWallpaper.startService(context)
+    }
 
     LaunchedEffect(Unit) { apps = loadApps(context) }
 
@@ -89,17 +149,25 @@ fun NonameApp() {
         query = ""
     }
 
+    // Beranda: kalau ada app yang di-pin, tampilkan itu saja.
+    val homeApps = if (pinned.isEmpty()) apps else apps.filter { it.packageName in pinned }
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-        wallpaper?.let {
-            Image(
-                bitmap = it.asImageBitmap(),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+        // ===== LATAR: video (bila aktif) atau wallpaper gambar =====
+        if (videoUri != null) {
+            VideoBackground(modifier = Modifier.fillMaxSize())
+        } else {
+            wallpaper?.let {
+                Image(
+                    bitmap = it.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
         }
 
-        // ===== HOME: grid ikon semua aplikasi =====
+        // ===== HOME: grid ikon =====
         LazyVerticalGrid(
             columns = GridCells.Fixed(4),
             modifier = Modifier
@@ -114,6 +182,11 @@ fun NonameApp() {
                             dragAccum = 0f
                         }
                     )
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onLongPress = { showHomeMenu = true }
+                    )
                 },
             contentPadding = PaddingValues(
                 start = 12.dp, end = 12.dp, top = 64.dp, bottom = 72.dp
@@ -121,7 +194,7 @@ fun NonameApp() {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            items(apps, key = { it.packageName }) { app ->
+            items(homeApps, key = { it.packageName }) { app ->
                 HomeIcon(
                     app = app,
                     onClick = { openApp(context, app.packageName) },
@@ -135,6 +208,14 @@ fun NonameApp() {
                 text = "Belum ada aplikasi.\nGeser ke atas untuk membuka drawer.",
                 color = Color.White.copy(alpha = 0.7f),
                 fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        } else if (homeApps.isEmpty()) {
+            Text(
+                text = "Aplikasi pin tidak ditemukan.\nLong-press aplikasi di drawer lalu \"Tambah ke Beranda\".",
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.align(Alignment.Center)
             )
@@ -164,27 +245,141 @@ fun NonameApp() {
             )
         }
 
-        // ===== MENU LONG-PRESS =====
+        // ===== MENU LONG-PRESS PADA APLIKASI =====
         selected?.let { app ->
             AlertDialog(
                 onDismissRequest = { selected = null },
                 title = { Text(app.label) },
-                text = { Text(app.packageName, fontSize = 12.sp) },
-                confirmButton = {
-                    TextButton(onClick = {
-                        selected = null
-                        openAppInfo(context, app.packageName)
-                    }) { Text("Info aplikasi") }
+                text = {
+                    Column {
+                        Text(
+                            text = app.packageName,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = {
+                            VideoWallpaper.togglePin(context, app.packageName)
+                            pinned = VideoWallpaper.getPinned(context)
+                            selected = null
+                        }) {
+                            Text(
+                                if (app.packageName in pinned) "Hapus dari Beranda"
+                                else "Tambah ke Beranda"
+                            )
+                        }
+                        TextButton(onClick = {
+                            selected = null
+                            openAppInfo(context, app.packageName)
+                        }) { Text("Info aplikasi") }
+                        TextButton(onClick = {
+                            selected = null
+                            uninstallApp(context, app.packageName)
+                        }) { Text("Hapus") }
+                    }
                 },
-                dismissButton = {
-                    TextButton(onClick = {
-                        selected = null
-                        uninstallApp(context, app.packageName)
-                    }) { Text("Hapus") }
+                confirmButton = {
+                    TextButton(onClick = { selected = null }) { Text("Tutup") }
+                }
+            )
+        }
+
+        // ===== MENU LONG-PRESS AREA KOSONG BERANDA =====
+        if (showHomeMenu) {
+            AlertDialog(
+                onDismissRequest = { showHomeMenu = false },
+                title = { Text("Wallpaper & Pengaturan") },
+                text = {
+                    Column {
+                        TextButton(onClick = {
+                            showHomeMenu = false
+                            pilihVideo()
+                        }) {
+                            Text(
+                                if (videoUri == null) "Pilih Video Wallpaper"
+                                else "Ganti Video Wallpaper"
+                            )
+                        }
+                        TextButton(onClick = {
+                            VideoWallpaper.setMuted(context, !muted)
+                            muted = !muted
+                        }) {
+                            Text(if (muted) "Suara Video: Senyap (tap untuk menyalakan)"
+                            else "Suara Video: Nyala (tap untuk membisukan)")
+                        }
+                        if (videoUri != null) {
+                            TextButton(onClick = {
+                                VideoWallpaper.disable(context)
+                                videoUri = null
+                                showHomeMenu = false
+                            }) { Text("Kembali ke Wallpaper Gambar") }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showHomeMenu = false }) { Text("Tutup") }
                 }
             )
         }
     }
+}
+
+/**
+ * Latar beranda berupa video. Player dimiliki singleton VideoWallpaper
+ * (dijaga service), jadi tetap berjalan walau beranda tidak tampil.
+ * Saat beranda terlihat -> permukaan video dipasang kembali;
+ * saat beranda menghilang -> permukaan dilepas, pemutaran berlanjut.
+ */
+@Composable
+fun VideoBackground(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var textureView by remember { mutableStateOf<TextureView?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner, textureView) {
+        val tv = textureView
+        val player = VideoWallpaper.getOrCreatePlayer(context)
+
+        // Setelah reboot/proses mati: siapkan ulang video dari preferensi.
+        if (player.mediaItemCount == 0) {
+            val uri = VideoWallpaper.getVideoUri(context)
+            if (uri != null) {
+                val item = androidx.media3.common.MediaItem.fromUri(uri)
+                player.setMediaItem(item)
+                player.prepare()
+                player.playWhenReady = true
+            }
+        }
+        if (tv != null) player.setVideoTextureView(tv)
+
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START ->
+                    if (textureView != null) player.setVideoTextureView(textureView)
+                Lifecycle.Event.ON_STOP -> player.clearVideoSurface()
+                else -> {}
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            try {
+                player.clearVideoSurface()
+            } catch (e: Exception) {
+                // abaikan
+            }
+        }
+    }
+
+    AndroidView(
+        factory = { ctx ->
+            TextureView(ctx).also {
+                textureView = it
+                VideoWallpaper.getOrCreatePlayer(ctx).setVideoTextureView(it)
+            }
+        },
+        modifier = modifier
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
